@@ -53,6 +53,9 @@ module RamRom(
 	assign DskRAMEN	= SwitchLatch[1] ^ ~DskROMSW;	// No longer an input for this
 	assign DskROMEN	= SwitchLatch[2] ^ ~DskROMSW;
 
+    // BeebMode enables an alternative ROM memory map where pages 7,A,C,D,E,F come from ROM pages 9,A,C,D,E,F
+	assign BeebMode	= SwitchLatch[3];
+
 	// Generate Intel type RD and WR strobes for ROM and RAM 
 	assign RDS	= (PHI2 & RW);
 	assign WDS	= (PHI2 & ~RW);
@@ -71,8 +74,8 @@ module RamRom(
 	assign 	LowRAMCS	= (Addr<16'h0A00);
 	assign	DskRAMCS	= (DskRAMEN && ((Addr>=16'h0A00) && (Addr<=16'h0AFF)));
 	assign	MidRAMCS	= ((Addr>=16'h0B00) && (Addr<=16'h6FFF));
-	assign	TopRAMCS	= (~ExtRAMEN && (Addr>=16'h7000) && (Addr<=16'h7FFF));
-	assign 	ExtRAMCS	= (ExtRAMEN && ExtIsRAM);
+	assign	TopRAMCS	= ((ExtRAMEN == BeebMode) && (Addr>=16'h7000) && (Addr<=16'h7FFF));
+	assign 	ExtRAMCS	= (ExtRAMEN && ~BeebMode && ExtIsRAM);
 	
 	// Final combined RAM CS
 	assign	RAMCS		= LowRAMCS || DskRAMCS || MidRAMCS || TopRAMCS || ExtRAMCS;
@@ -115,6 +118,10 @@ module RamRom(
 	assign Data[3:0]		= LatchRead ? DataOut[3:0] : 4'bz;
 	
 	// Rom Chip selects
+    assign  BeebRomCS   = BeebMode && (
+        ((Addr>=16'h7000) && (Addr<=16'h7FFF) && ~ExtRAMEN) ||
+        ((Addr>=16'hA000) && (Addr<=16'hAFFF)) || 
+        ((Addr>=16'hC000) && (Addr<=16'hFFFF)));
 	assign	ExtRomCS	= ExtRAMEN ? (ExtRomRamCS && (RomLatch>4'h0)) : ExtRomRamCS;
 	assign 	BasRomCS	= ((Addr>=16'hC000) && (Addr<=16'hCFFF));
 	assign 	FPRomCS		= ((Addr>=16'hD000) && (Addr<=16'hDFFF));
@@ -122,18 +129,26 @@ module RamRom(
 	assign 	MOSRomCS	= ((Addr>=16'hF000) && (Addr<=16'hFFFF));
 	assign 	SysRomCS	= (BasRomCS || FPRomCS || DskRomCS || MOSRomCS);
 
-   // Drivers for the upper address lines, which are dependent on which chip is being
+
+    // Drivers for the upper address lines, which are dependent on which chip is being
 	// accessed ROM or RAM and the settings of the various enable signals.
 	wire [16:12] RARAM;
 	wire [16:12] RAROM;	
 	
 	assign	RARAM[16:12]	= (Addr < 16'h8000) ? {2'b00,Addr[14:12]} : { 5'b00111 };
-	assign	RAROM[16:12]	= (Addr < 16'hC000) ? {1'b0,RomLatch[15:12]} : {2'b10,~DskROMEN,Addr[13:12]};	
-	assign	RA[16:12]		= RAMCS ? RARAM[16:12] : RAROM[16:12];		
+
+    // Phill's Original Code
+	// assign	RAROM[16:12]	= (Addr < 16'hC000) ? {1'b0,RomLatch[15:12]} : {2'b10,~DskROMEN,Addr[13:12]};	
+
+    assign	RAROM[16:12]	= BeebMode
+     ? ((Addr >= 16'h7000 & Addr <=16'h7fff) ? 5'b01001 : {1'b0,Addr[15:12]})
+     : ((Addr < 16'hC000) ? {1'b0,RomLatch[15:12]} : {2'b10,~DskROMEN,Addr[13:12]});
+
+	assign	RA[16:12]		= RAMCS ? RARAM[16:12] : RAROM[16:12];
 	
 	// Rombox chip select, slectedbetwen $A000 and $AFFF
 	// System rom chip select in pages $C000, $D000, $F000
-	assign 	ROMCS		= (ExtRomCS || SysRomCS);
+	assign 	ROMCS		= (ExtRomCS || SysRomCS || BeebRomCS);
 	assign	NROMCS		= ~ROMCS;
 	
 	// IC2 / IC3 / IC4 enable control.                                                                                     
