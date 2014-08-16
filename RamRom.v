@@ -54,7 +54,7 @@ module RamRom(
 	assign DskROMEN	 = SwitchLatch[2] ^ ~DskROMSW;
 
     // Signals to enable RAM at 6000 and 7000 in Beeb Mode
-    assign ExtRAMEN1 = SwitchLatch[0];
+    assign ExtRAMEN1 = SwitchLatch[0] && (RomLatch==4'h0);
     assign ExtRAMEN2 = SwitchLatch[1];
 
     // BeebMode enables an alternative ROM memory map where pages 7,A,C,D,E,F come from ROM pages 9,A,C,D,E,F
