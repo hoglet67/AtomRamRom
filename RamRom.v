@@ -49,9 +49,13 @@ module RamRom(
 	// jumper, writing it to 0 leaves it unchanged.
 	// 2012-08-11, Changed logic so that if an external Disk ROM is enabled then the
 	// Hole at $0A00 is also enabled as this is where the FDC does it's I/O.
-	assign ExtRAMEN	= SwitchLatch[0];	// No longer an input for this
-	assign DskRAMEN	= SwitchLatch[1] ^ ~DskROMSW;	// No longer an input for this
-	assign DskROMEN	= SwitchLatch[2] ^ ~DskROMSW;
+	assign ExtRAMEN	 = SwitchLatch[0];	// No longer an input for this
+	assign DskRAMEN	 = SwitchLatch[1] ^ ~DskROMSW;	// No longer an input for this
+	assign DskROMEN	 = SwitchLatch[2] ^ ~DskROMSW;
+
+    // Signals to enable RAM at 6000 and 7000 in Beeb Mode
+    assign ExtRAMEN1 = SwitchLatch[0];
+    assign ExtRAMEN2 = SwitchLatch[1];
 
     // BeebMode enables an alternative ROM memory map where pages 7,A,C,D,E,F come from ROM pages 9,A,C,D,E,F
 	assign BeebMode	= SwitchLatch[3];
@@ -72,13 +76,14 @@ module RamRom(
 	
 	// Generate RAM chip selects, some are dependent on external lines
 	assign 	LowRAMCS	= (Addr<16'h0A00);
-	assign	DskRAMCS	= (DskRAMEN && ((Addr>=16'h0A00) && (Addr<=16'h0AFF)));
-	assign	MidRAMCS	= ((Addr>=16'h0B00) && (Addr<=16'h6FFF));
-	assign	TopRAMCS	= ((ExtRAMEN == BeebMode) && (Addr>=16'h7000) && (Addr<=16'h7FFF));
+	assign	DskRAMCS	= (DskRAMEN && ~BeebMode && ((Addr>=16'h0A00) && (Addr<=16'h0AFF)));
+	assign	MidRAMCS	= ((Addr>=16'h0B00) && (Addr<=16'h5FFF));
+	assign	TopRAMCS1	= ((ExtRAMEN1 == BeebMode) && (Addr>=16'h6000) && (Addr<=16'h6FFF));
+	assign	TopRAMCS2	= ((ExtRAMEN2 == BeebMode) && (Addr>=16'h7000) && (Addr<=16'h7FFF));
 	assign 	ExtRAMCS	= (ExtRAMEN && ~BeebMode && ExtIsRAM);
 	
 	// Final combined RAM CS
-	assign	RAMCS		= LowRAMCS || DskRAMCS || MidRAMCS || TopRAMCS || ExtRAMCS;
+	assign	RAMCS		= LowRAMCS || DskRAMCS || MidRAMCS || TopRAMCS1 || TopRAMCS2 || ExtRAMCS;
 	assign	NRAMCS		= ~RAMCS;
 
 	// Rombox chip select, used to select which of the banked roms to access
@@ -119,9 +124,11 @@ module RamRom(
 	
 	// Rom Chip selects
     assign  BeebRomCS   = BeebMode && (
-        ((Addr>=16'h7000) && (Addr<=16'h7FFF) && ~ExtRAMEN) ||
+        ((Addr>=16'h6000) && (Addr<=16'h6FFF) && ~ExtRAMEN1) ||
+        ((Addr>=16'h7000) && (Addr<=16'h7FFF) && ~ExtRAMEN2) ||
         ((Addr>=16'hA000) && (Addr<=16'hAFFF)) || 
         ((Addr>=16'hC000) && (Addr<=16'hFFFF)));
+        
 	assign	ExtRomCS	= ExtRAMEN ? (ExtRomRamCS && (RomLatch>4'h0)) : ExtRomRamCS;
 	assign 	BasRomCS	= ((Addr>=16'hC000) && (Addr<=16'hCFFF));
 	assign 	FPRomCS		= ((Addr>=16'hD000) && (Addr<=16'hDFFF));
@@ -141,8 +148,15 @@ module RamRom(
 	// assign	RAROM[16:12]	= (Addr < 16'hC000) ? {1'b0,RomLatch[15:12]} : {2'b10,~DskROMEN,Addr[13:12]};	
 
     assign	RAROM[16:12]	= BeebMode
-     ? ((Addr >= 16'h7000 & Addr <=16'h7fff) ? 5'b01001 : {1'b0,Addr[15:12]})
-     : ((Addr < 16'hC000) ? {1'b0,RomLatch[15:12]} : {2'b10,~DskROMEN,Addr[13:12]});
+     ?
+     // Beeb Mode
+     (
+         (Addr >= 16'h6000 && Addr <=16'h6fff) ? {2'b01,RomLatch[14:12]} :
+         ((Addr >= 16'h7000 && Addr <=16'h7fff) ? 5'b11001 : {1'b1,Addr[15:12]})
+     )
+     :
+     // Atom Mode
+     ((Addr < 16'hC000) ? {1'b0,RomLatch[15:12]} : {2'b10,~DskROMEN,Addr[13:12]});
 
 	assign	RA[16:12]		= RAMCS ? RARAM[16:12] : RAROM[16:12];
 	
@@ -159,7 +173,7 @@ module RamRom(
 	// I/O in the region $BC00-$BFF0 is accessed.
 	// To enable this IC5 must be removed and the NBuffCtl output linked to pin 8 
 	// of it's socket.
-	assign 	DskRAMBuffEn	= (~DskRAMEN && ((Addr>=16'h0A00) && (Addr<=16'h0AFF)));
+	assign 	DskRAMBuffEn	= (~DskRAMEN && ~BeebMode && ((Addr>=16'h0A00) && (Addr<=16'h0AFF)));
 	assign 	DskROMBuffEn	= (~DskROMEN && (Addr>=16'hE000) && (Addr<=16'hEFFF));
 	assign 	IOBuffEn		= ((Addr>=16'hBC00) && (Addr<=16'hBFF0));
 	
