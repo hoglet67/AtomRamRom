@@ -76,7 +76,7 @@ module RamRom(
 	
 	// Generate RAM chip selects, some are dependent on external lines
 	assign 	LowRAMCS	= (Addr<16'h0A00);
-	assign	DskRAMCS	= (DskRAMEN && ~BeebMode && ((Addr>=16'h0A00) && (Addr<=16'h0AFF)));
+	assign	DskRAMCS	= ((DskRAMEN || BeebMode) && ((Addr>=16'h0A00) && (Addr<=16'h0AFF)));
 	assign	MidRAMCS	= ((Addr>=16'h0B00) && (Addr<=16'h5FFF));
 	assign	TopRAMCS1	= ((ExtRAMEN1 == BeebMode) && (Addr>=16'h6000) && (Addr<=16'h6FFF));
 	assign	TopRAMCS2	= ((ExtRAMEN2 == BeebMode) && (Addr>=16'h7000) && (Addr<=16'h7FFF));
